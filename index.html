@@ -548,29 +548,14 @@ footer a { color: var(--accent2); text-decoration: none; }
   <p class="subtitle">Create an account and enter the world. Your starter Rappter is waiting.</p>
 
   <div class="signup-form">
-    <form id="signup-form">
-      <div class="form-group">
-        <label for="email">Email</label>
-        <input type="email" id="email" placeholder="you@example.com" required>
-      </div>
-      <div class="form-group">
-        <label for="username">Trainer Name</label>
-        <input type="text" id="username" placeholder="3-30 chars, lowercase" required pattern="[a-z0-9][a-z0-9-]{1,28}[a-z0-9]">
-      </div>
-      <div class="form-group">
-        <label for="password">Password</label>
-        <input type="password" id="password" placeholder="8+ characters" required minlength="8">
-      </div>
-      <p class="form-error" id="form-error"></p>
-      <button type="submit" class="btn btn-primary btn-submit" id="submit-btn">Create Account & Enter World</button>
-    </form>
+    <p style="color: var(--muted); margin-bottom: 20px; font-size: 0.95em;">Sign in with your GitHub account to claim your starter Rappter and enter the world.</p>
 
-    <div class="form-divider">or</div>
-
-    <button class="btn btn-github" id="github-btn">
+    <button class="btn btn-primary btn-submit" id="github-btn" style="width:100%;justify-content:center;">
       <svg width="20" height="20" viewBox="0 0 16 16" fill="white"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
-      Sign up with GitHub
+      Sign in with GitHub
     </button>
+
+    <p id="auth-status" style="margin-top: 16px; display: none;"></p>
   </div>
 </section>
 
@@ -580,52 +565,28 @@ footer a { color: var(--accent2); text-decoration: none; }
 </footer>
 
 <script>
-const AUTH_URL = 'https://rappterbook-auth.kwildfeuer.workers.dev';
 const CLIENT_ID = 'Ov23liuueQBIUggrH8NG';
 
-// ── Signup Form ──
-document.getElementById('signup-form').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const btn = document.getElementById('submit-btn');
-  const error = document.getElementById('form-error');
-  error.style.display = 'none';
-  btn.disabled = true;
-  btn.textContent = 'Creating your world...';
-
-  try {
-    const resp = await fetch(`${AUTH_URL}/api/auth/signup`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        email: document.getElementById('email').value,
-        username: document.getElementById('username').value,
-        password: document.getElementById('password').value,
-        display_name: document.getElementById('username').value,
-      }),
-    });
-
-    const data = await resp.json();
-    if (!resp.ok) throw new Error(data.error || 'Signup failed');
-
-    localStorage.setItem('rmmo_jwt', data.token);
-    localStorage.setItem('rmmo_user', JSON.stringify(data.user));
-
-    btn.textContent = 'Welcome, trainer!';
-    btn.style.background = 'var(--green)';
-    setTimeout(() => {
-      window.location.hash = '#/world';
-      // TODO: redirect to game world
-    }, 1500);
-  } catch (err) {
-    error.textContent = err.message;
-    error.style.display = 'block';
-    btn.disabled = false;
-    btn.textContent = 'Create Account & Enter World';
+// ── Check if already logged in ──
+(function() {
+  const token = localStorage.getItem('rmmo_token');
+  const user = localStorage.getItem('rmmo_user');
+  if (token && user) {
+    try {
+      const u = JSON.parse(user);
+      const status = document.getElementById('auth-status');
+      status.innerHTML = `Signed in as <strong>${u.name || u.login}</strong> <a href="javascript:void(0)" onclick="localStorage.clear();location.reload()" style="color:var(--accent2);margin-left:8px;">Sign out</a>`;
+      status.style.display = 'block';
+      document.getElementById('github-btn').textContent = 'Enter World';
+      document.getElementById('github-btn').onclick = () => { alert('World loading... coming soon!'); };
+    } catch(e) {}
   }
-});
+})();
 
-// ── GitHub OAuth ──
+// ── GitHub Device Code Auth ──
 document.getElementById('github-btn').addEventListener('click', async () => {
+  if (localStorage.getItem('rmmo_token')) return;
+
   const btn = document.getElementById('github-btn');
   btn.disabled = true;
   btn.textContent = 'Connecting to GitHub...';
@@ -640,54 +601,70 @@ document.getElementById('github-btn').addEventListener('click', async () => {
     if (!resp.ok) throw new Error('Failed to start GitHub auth');
     const data = await resp.json();
 
-    // Show code modal
     const modal = document.createElement('div');
     modal.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,0.8);display:flex;align-items:center;justify-content:center;z-index:9999;';
     modal.innerHTML = `
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:16px;padding:32px;max-width:400px;text-align:center;">
         <h3 style="margin-bottom:16px;">Sign in with GitHub</h3>
-        <p style="color:var(--muted);margin-bottom:12px;">Copy this code:</p>
-        <div style="font-size:2em;font-weight:700;letter-spacing:4px;color:var(--accent2);background:var(--bg);border:2px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:16px;cursor:pointer;" onclick="navigator.clipboard.writeText('${data.user_code}')">${data.user_code}</div>
-        <a href="${data.verification_uri}" target="_blank" style="display:inline-block;background:#238636;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Open GitHub</a>
-        <p style="color:var(--muted);font-size:0.85em;margin-top:16px;">Waiting for authorization...</p>
-        <button onclick="this.parentElement.parentElement.remove()" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:6px 16px;cursor:pointer;margin-top:12px;">Cancel</button>
+        <p style="color:var(--muted);margin-bottom:12px;">1. Copy this code:</p>
+        <div id="device-code" style="font-size:2em;font-weight:700;letter-spacing:4px;color:var(--accent2);background:var(--bg);border:2px solid var(--accent);border-radius:8px;padding:12px;margin-bottom:8px;cursor:pointer;">${data.user_code}</div>
+        <button id="copy-btn" style="background:var(--accent);color:white;border:none;border-radius:6px;padding:8px 20px;font-weight:600;cursor:pointer;margin-bottom:16px;">Copy code</button>
+        <p style="color:var(--muted);margin-bottom:12px;">2. Open GitHub and paste the code:</p>
+        <a href="${data.verification_uri}" target="_blank" style="display:inline-block;background:#238636;color:white;padding:10px 24px;border-radius:8px;text-decoration:none;font-weight:600;">Open github.com/login/device</a>
+        <p id="poll-status" style="color:var(--muted);font-size:0.85em;margin-top:16px;">Waiting for authorization...</p>
+        <button id="cancel-auth" style="background:none;border:1px solid var(--border);color:var(--muted);border-radius:6px;padding:6px 16px;cursor:pointer;margin-top:12px;">Cancel</button>
       </div>
     `;
     document.body.appendChild(modal);
 
-    // Poll for completion
-    const poll = async () => {
-      const tresp = await fetch('https://github.com/login/oauth/access_token', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
-        body: JSON.stringify({ client_id: CLIENT_ID, device_code: data.device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }),
+    modal.querySelector('#copy-btn').onclick = () => {
+      navigator.clipboard.writeText(data.user_code).then(() => {
+        modal.querySelector('#copy-btn').textContent = 'Copied!';
+        setTimeout(() => { modal.querySelector('#copy-btn').textContent = 'Copy code'; }, 2000);
       });
-      const tdata = await tresp.json();
-      if (tdata.access_token) {
-        // Exchange for platform JWT
-        const authResp = await fetch(`${AUTH_URL}/api/auth/github`, {
+    };
+    modal.querySelector('#cancel-auth').onclick = () => { clearTimeout(pollTimer); modal.remove(); btn.disabled = false; btn.innerHTML = svgGH + ' Sign in with GitHub'; };
+
+    let pollTimer;
+    const poll = async () => {
+      try {
+        const tresp = await fetch('https://github.com/login/oauth/access_token', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ access_token: tdata.access_token }),
+          headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+          body: JSON.stringify({ client_id: CLIENT_ID, device_code: data.device_code, grant_type: 'urn:ietf:params:oauth:grant-type:device_code' }),
         });
-        const authData = await authResp.json();
-        if (authResp.ok) {
-          localStorage.setItem('rmmo_jwt', authData.token);
-          localStorage.setItem('rmmo_user', JSON.stringify(authData.user));
+        const tdata = await tresp.json();
+
+        if (tdata.access_token) {
+          localStorage.setItem('rmmo_token', tdata.access_token);
+          // Fetch user profile
+          const uresp = await fetch('https://api.github.com/user', {
+            headers: { Authorization: `token ${tdata.access_token}`, Accept: 'application/vnd.github+json' },
+          });
+          if (uresp.ok) {
+            const u = await uresp.json();
+            localStorage.setItem('rmmo_user', JSON.stringify({ login: u.login, name: u.name || u.login, avatar_url: u.avatar_url }));
+          }
           modal.remove();
           window.location.reload();
+          return;
         }
-      } else if (tdata.error === 'authorization_pending') {
-        setTimeout(poll, (data.interval || 5) * 1000);
+        if (tdata.error === 'authorization_pending') { pollTimer = setTimeout(poll, (data.interval || 5) * 1000); return; }
+        if (tdata.error === 'slow_down') { pollTimer = setTimeout(poll, (data.interval + 5) * 1000); return; }
+        modal.querySelector('#poll-status').textContent = 'Authorization failed: ' + (tdata.error || 'unknown');
+      } catch (e) {
+        pollTimer = setTimeout(poll, (data.interval || 5) * 1000);
       }
     };
-    setTimeout(poll, (data.interval || 5) * 1000);
+    pollTimer = setTimeout(poll, (data.interval || 5) * 1000);
 
   } catch (err) {
     btn.disabled = false;
-    btn.innerHTML = '<svg width="20" height="20" viewBox="0 0 16 16" fill="white"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg> Sign up with GitHub';
+    btn.innerHTML = svgGH + ' Sign in with GitHub';
   }
 });
+
+const svgGH = '<svg width="20" height="20" viewBox="0 0 16 16" fill="white"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>';
 
 // ── Animate pulse numbers ──
 function animateNumber(el, target) {
